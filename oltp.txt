@@ -1,0 +1,79 @@
+---------------------------------------------------------
+-- STEP 1 : Force exit from current DB & drop old DBs
+---------------------------------------------------------
+USE master;
+GO
+
+IF DB_ID('DW_DB') IS NOT NULL
+BEGIN
+    ALTER DATABASE DW_DB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE DW_DB;
+END
+GO
+
+IF DB_ID('OLTP_DB') IS NOT NULL
+BEGIN
+    ALTER DATABASE OLTP_DB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE OLTP_DB;
+END
+GO
+
+---------------------------------------------------------
+-- STEP 2 : Create fresh databases
+---------------------------------------------------------
+CREATE DATABASE OLTP_DB;
+CREATE DATABASE DW_DB;
+GO
+
+---------------------------------------------------------
+-- STEP 3 : Create OLTP Source Table
+---------------------------------------------------------
+USE OLTP_DB;
+GO
+CREATE TABLE Employee_Salary (
+    EmployeeID INT PRIMARY KEY,
+    MonthlySalary DECIMAL(10,2),
+    Bonus DECIMAL(10,2)
+);
+
+INSERT INTO Employee_Salary VALUES
+(1, 30000, 5000),
+(2, 45000, 7000),
+(3, 50000, 8000);
+
+---------------------------------------------------------
+-- STEP 4 : Create DW Staging & Fact Tables
+---------------------------------------------------------
+USE DW_DB;
+GO
+
+CREATE TABLE Staging_Employee (
+    EmployeeID INT,
+    MonthlySalary DECIMAL(10,2),
+    Bonus DECIMAL(10,2),
+    TotalSalary AS (MonthlySalary + Bonus)
+);
+
+CREATE TABLE Fact_EmployeeSalary (
+    EmployeeID INT,
+    TotalSalary DECIMAL(10,2)
+);
+
+---------------------------------------------------------
+-- STEP 5 : ETL Load From OLTP → Staging → Fact
+---------------------------------------------------------
+INSERT INTO Staging_Employee (EmployeeID, MonthlySalary, Bonus)
+SELECT EmployeeID, MonthlySalary, Bonus
+FROM OLTP_DB.dbo.Employee_Salary;
+
+INSERT INTO Fact_EmployeeSalary (EmployeeID, TotalSalary)
+SELECT EmployeeID, TotalSalary
+FROM Staging_Employee;
+GO
+
+---------------------------------------------------------
+-- STEP 6 : View Results
+---------------------------------------------------------
+SELECT * FROM OLTP_DB.dbo.Employee_Salary;
+SELECT * FROM DW_DB.dbo.Staging_Employee;
+SELECT * FROM DW_DB.dbo.Fact_EmployeeSalary;
