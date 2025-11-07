@@ -1,0 +1,140 @@
+-------------------------------------------------------
+-- 8-TABLE GALAXY STAR SCHEMA (SQL SERVER)
+-------------------------------------------------------
+
+-- Drop if exists
+IF OBJECT_ID('FactPlanetHabitability') IS NOT NULL DROP TABLE FactPlanetHabitability;
+IF OBJECT_ID('FactStarObservation') IS NOT NULL DROP TABLE FactStarObservation;
+IF OBJECT_ID('DimObservationDate') IS NOT NULL DROP TABLE DimObservationDate;
+IF OBJECT_ID('DimTelescope') IS NOT NULL DROP TABLE DimTelescope;
+IF OBJECT_ID('DimConstellation') IS NOT NULL DROP TABLE DimConstellation;
+IF OBJECT_ID('DimPlanet') IS NOT NULL DROP TABLE DimPlanet;
+IF OBJECT_ID('DimStar') IS NOT NULL DROP TABLE DimStar;
+IF OBJECT_ID('DimGalaxy') IS NOT NULL DROP TABLE DimGalaxy;
+
+-------------------------------------------------------
+-- DIMENSIONS
+-------------------------------------------------------
+
+CREATE TABLE DimGalaxy (
+    GalaxyID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Type VARCHAR(50),
+    DistanceMly DECIMAL(10,2) -- Million Light Years
+);
+
+CREATE TABLE DimStar (
+    StarID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    SpectralType VARCHAR(10),
+    MassSolar DECIMAL(10,2),
+    GalaxyID INT FOREIGN KEY REFERENCES DimGalaxy(GalaxyID)
+);
+
+CREATE TABLE DimPlanet (
+    PlanetID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    MassEarth DECIMAL(10,2),
+    StarID INT FOREIGN KEY REFERENCES DimStar(StarID)
+);
+
+CREATE TABLE DimConstellation (
+    ConstellationID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Hemisphere VARCHAR(20)
+);
+
+CREATE TABLE DimTelescope (
+    TelescopeID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Country VARCHAR(50)
+);
+
+CREATE TABLE DimObservationDate (
+    DateID INT PRIMARY KEY,
+    FullDate DATE,
+    Year INT,
+    Month INT,
+    Season VARCHAR(20)
+);
+
+-------------------------------------------------------
+-- FACT TABLES
+-------------------------------------------------------
+
+CREATE TABLE FactStarObservation (
+    FactObsID INT PRIMARY KEY,
+    StarID INT FOREIGN KEY REFERENCES DimStar(StarID),
+    ConstellationID INT FOREIGN KEY REFERENCES DimConstellation(ConstellationID),
+    TelescopeID INT FOREIGN KEY REFERENCES DimTelescope(TelescopeID),
+    DateID INT FOREIGN KEY REFERENCES DimObservationDate(DateID),
+    VisibilityScore INT,     -- 0–10
+    Luminosity DECIMAL(10,2) -- Relative brightness
+);
+
+CREATE TABLE FactPlanetHabitability (
+    FactHabID INT PRIMARY KEY,
+    PlanetID INT FOREIGN KEY REFERENCES DimPlanet(PlanetID),
+    IsHabitable BIT,
+    OxygenPercent DECIMAL(5,2),
+    WaterPresence BIT,
+    TemperatureC INT
+);
+
+-------------------------------------------------------
+-- INSERT DIMENSION DATA
+-------------------------------------------------------
+
+INSERT INTO DimGalaxy VALUES
+(1, 'Milky Way', 'Spiral', 0.00),
+(2, 'Andromeda', 'Spiral', 2.54);
+
+INSERT INTO DimStar VALUES
+(101, 'Sun', 'G2V', 1.00, 1),
+(102, 'Alpha Andromedae', 'B8IV', 4.50, 2);
+
+INSERT INTO DimPlanet VALUES
+(1001, 'Earth', 1.00, 101),
+(1002, 'Kepler-X', 2.30, 102);
+
+INSERT INTO DimConstellation VALUES
+(1, 'Orion', 'Both'),
+(2, 'Andromeda', 'Northern');
+
+INSERT INTO DimTelescope VALUES
+(1, 'Hubble', 'USA'),
+(2, 'VLT', 'Chile');
+
+INSERT INTO DimObservationDate VALUES
+(20250101, '2025-01-01', 2025, 1, 'Winter'),
+(20250401, '2025-04-01', 2025, 4, 'Spring');
+
+-------------------------------------------------------
+-- INSERT FACT DATA
+-------------------------------------------------------
+
+INSERT INTO FactStarObservation VALUES
+(1, 101, 1, 1, 20250101, 9, 3.00),
+(2, 102, 2, 2, 20250401, 8, 4.50);
+
+INSERT INTO FactPlanetHabitability VALUES
+(1, 1001, 1, 21.00, 1, 15),
+(2, 1002, 0,  0.00, 0, 350);
+
+-------------------------------------------------------
+-- SAMPLE ANALYSIS QUERIES
+-------------------------------------------------------
+
+-- Q1: Stars visibility by constellation
+SELECT c.Name AS Constellation, s.Name AS Star,
+       f.VisibilityScore, d.FullDate
+FROM FactStarObservation f
+JOIN DimStar s ON f.StarID = s.StarID
+JOIN DimConstellation c ON f.ConstellationID = c.ConstellationID
+JOIN DimObservationDate d ON f.DateID = d.DateID
+ORDER BY VisibilityScore DESC;
+
+-- Q2: Habitable planet check
+SELECT p.Name AS Planet, h.IsHabitable, h.OxygenPercent, h.WaterPresence
+FROM FactPlanetHabitability h
+JOIN DimPlanet p ON h.PlanetID = p.PlanetID;
